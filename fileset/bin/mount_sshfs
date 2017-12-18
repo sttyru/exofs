@@ -1,0 +1,3 @@
+#!/bin/bash
+/opt/exofs/bin/exofs --jobid="MOUNT SSHFS JOB1" --jobtype="mount" --protocol="SSHFS" --rhost="REMOTE_HOST_FQDN_OR_IP" --credentials="/opt/exofs/etc/mount_sshfs_job1.conf" --source="/var/sshfs_job1" --destination="/REMOTE_DIR" --sendreport="true" --email="YOU_EMAIL@HERE.DOMAIN"
+exit 0;

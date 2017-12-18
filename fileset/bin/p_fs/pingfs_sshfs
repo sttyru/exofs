@@ -1,0 +1,3 @@
+#!/bin/bash
+/opt/exofs/bin/pingfs "/var/sshfs_job1" "/var/sshfs_job1/is_mnt" 
+exit 0;

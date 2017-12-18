@@ -1,0 +1,311 @@
+#!/bin/bash
+#
+######################################################
+# -- EXOFS: MOUNT / UMOUNT / CHECK SSHFS or FTPFS -- #
+# -- E-MAIL: ab@stty.ru | https://stty.ru            #
+######################################################
+basedir="/opt/exofs"                      
+modulename="exofs"
+source "/opt/exofs/etc/exofs.conf"
+OPTIND=1
+# -- calculate time
+t1=$(date +%s.%N)
+# -- FUNCTIONS
+#
+# * function sig_t() 
+# * EXIT WITH ERROR 100 [CRITICAL]
+#
+function sig_t() {
+    echo "${red}${bold}EXIT CODE: 1 (ERROR)${reset}"
+    exit 1;
+}
+# 
+# * function: err_show
+# * SHOW ERROR MESSAGE 
+# 
+function err_show() {                # prototype
+# $1 - err type
+# $2 - function name
+# $3 - caller 
+# $4 - message
+    echo $1 $2 $3
+    return 0;
+}
+#
+# * function log_proc() 
+# * WRITE MESSAGE TO LOG FILE
+#
+function log_proc()
+{
+if [ -z "$1" ] ; then
+  echo "$fdate4log - [$msg_err]:$modulename:$FUNCNAME:`caller` - $msg_err_not_null"  
+  sig_t
+fi
+if [ "$3" == "syslog" ]
+   then
+      logger -i -t $modulename "$2"
+fi
+#
+if [ "$4" == "-e" ]
+   then
+     echo -e "$2" >> "$1"
+     return 0;
+   else
+     echo -E "$2" >> "$1"
+     return 0;
+fi 
+#
+    echo "$2" >> "$1"
+return 0;
+}
+#
+# * function log_prep()
+# * PREPARE LOG FILE
+# 
+function log_prep()
+{
+# -- create an empty the logfile
+touch $out_log
+# -- write some stuff to the logfile
+log_proc "$out_log" "$html_header"
+log_proc "$out_log" "<h2>exofs report</h2>"
+log_proc "$out_log" "$log_deli <br/>"
+log_proc "$out_log" "<h3>Common Information</h3>"
+log_proc "$out_log" "<pre>"
+log_proc "$out_log" "Host             : $srvname<br/>" 
+log_proc "$out_log" "Date             : $fdate4log<br/>" 
+log_proc "$out_log" "Started by       : $cuser<br/>"
+log_proc "$out_log" "</pre>"
+log_proc "$out_log" " " "-e"
+log_proc "$out_log" "<h3>Job details</h3>"
+log_proc "$out_log" "<pre>"
+log_proc "$out_log" "Job name         : $1<br/>"
+log_proc "$out_log" "Job type         : $2<br/>"
+log_proc "$out_log" "Protocol         : $3<br/>"
+log_proc "$out_log" "Remote Host      : $4<br/>"
+log_proc "$out_log" "Credentials      : $5<br/>"
+log_proc "$out_log" "SOURCE           : $6<br/>"
+log_proc "$out_log" "DESTINATION      : $7<br/>"
+log_proc "$out_log" "$log_deli <br/>"
+return 0;
+}
+# 
+# * function log_close() 
+# 
+function log_close() 
+{
+local elapsed_time=`printf "Elapsed Time (s) :  %.3F\n"  $(echo "$t2 - $t1"|bc )`
+log_proc "$out_log" "$log_deli <br/>"
+echo "$elapsed_time <br/>" >> "$out_log"
+log_proc "$out_log" "$html_footer"
+return 0;
+}
+#
+# * function check_src()
+# * CHECK SOURCE IS AVAILABLE
+#
+function check_src()
+{
+    if [ -d "$1" ]; then
+        echo "$fdate4log - [$msg_info]:$modulename:$FUNCNAME:`caller` - $1: ${green}${bold}$msg_info_src_exist${reset}"
+        return 0;
+    fi
+       echo "$fdate4log - [$msg_err]:$modulename:$FUNCNAME:`caller` - $1: ${red}${bold}$msg_err_src_exist ${reset}"
+       return 1;
+}
+#
+# * function: check_fs()
+# * CHECK FILESYSTEM -- IS MOUNTED? 
+function check_fs()
+{
+    if [ -f "$1/is_mnt" ]; then
+        echo "$fdate4log - [$msg_info]:$modulename:$FUNCNAME:`caller` - $1: ${green}${bold}$msg_info_fs_mount${reset}"
+        return 0;
+    fi
+        echo "$fdate4log - [$msg_err]:$modulename:$FUNCNAME:`caller` - $1: ${red}${bold}$msg_err_fs_mount${reset}"
+        return 1;
+}
+#
+# * function: mount_fs()
+# * GENERAL FUNCTION :)
+function mount_fs()
+{
+# -- debug
+#    echo "PROTOCOL: $1" "REMOTEHOST: $2" "CREDENTIALS: $3" "SOURCE: $4" "$DESTINATION: $5"
+    if [[ "$1" == "FTPFS" ]] ;then
+        if [[ ! -f "$3" ]] ;then
+                echo "$fdate4log - [$msg_warn]:$modulename:$FUNCNAME:main - ${bold}$3 ${red}$msg_err_not_found${reset}"
+                log_proc "$out_log" "ERROR : $3 is not found<br/>" 
+                return 1;
+        fi
+        source "$3"
+        mnt_result_ret=`$ftpfs -o fsname=$2$5 ftp://"$username":"$password"@"$2""$5" "$4"` >> "$out_log"
+        mnt_result_ret=$?
+        if [[ "$mnt_result_ret" -gt "0" ]] ; then 
+                return 1;
+        fi
+                echo "$fdate4log - [$msg_info]:$modulename:$FUNCNAME:main - ${bold}SUCCESS: ${green}$4 mounted to $2$5"     
+                log_proc "$out_log" "SUCCESS : $4 was mounted to $2$4" "syslog"
+                log_proc "$out_log" "<br/>"
+                return 0;
+    elif [[ "$1" == "SSHFS" ]]; then
+        if [[ ! -f "$3" ]] ;then
+                echo "$fdate4log - [$msg_warn]:$modulename:$FUNCNAME:main - ${bold}$3 ${red}$msg_err_not_found${reset}"
+                log_proc "$out_log" "ERROR : $3 is not found<br/>" 
+                return 1;
+        fi                
+        source "$3"
+        mnt_result_ret=`$sshfs "$2":"$5" "$4" -o IdentityFile="$keyfile"` >> "$out_log"
+        mnt_result_ret=$?
+        if [[ "$mnt_result_ret" -gt "0" ]] ; then 
+                return 1;
+        fi
+                echo "$fdate4log - [$msg_info]:$modulename:$FUNCNAME:main - ${bold}SUCCESS: ${green}$4 mounted to $2$5"     
+                log_proc "$out_log" "SUCCESS : $4 was mounted to $2$4" "syslog"
+                log_proc "$out_log" "<br/>"
+                return 0;
+    else
+        echo "$fdate4log - [$msg_warn]:$modulename:$FUNCNAME:main - $1: ${red}${bold}$msg_err_unk_protocol${reset}" 
+        return 1;
+    fi 
+}
+#
+# * function: umount_fs
+# 
+function umount_fs()
+{
+    return 0;
+}
+# * PROCEED COMMANDLINE
+# 
+# -- get commandline arguments
+for i in "$@"
+do
+case $i in
+    -jid=*|--jobid=*)
+    JOBID="${i#*=}"
+    ;;
+    -jt=*|--jobtype=*)
+    JOBTYPE="${i#*=}"
+    ;;
+    -prot=*|--protocol=*)
+    PROTOCOL="${i#*=}"
+    ;;
+    -rhost=*|--rhost=*)
+    REMOTEHOST="${i#*=}"
+    ;;    
+    -cred=*|--credentials=*)
+    CREDENTIALS="${i#*=}"
+    ;;    
+    -src=*|--source=*)
+    SOURCE="${i#*=}"
+    ;;
+    -dst=*|--destination=*)
+    DESTINATION="${i#*=}"
+    ;;
+    -sr=*|--sendreport=*)
+    SENDREPORT="${i#*=}"
+    ;;
+    -email=*|--email=*)
+    EMAIL="${i#*=}"
+    ;;
+    *)
+    ;;
+esac
+done
+#
+# ----------------------------- PROCESSING --------------------------------------------------------------------------- #
+#
+log_prep "$JOBID" "$JOBTYPE" "$PROTOCOL" "$REMOTEHOST" "$CREDENTIALS" "$SOURCE" "$DESTINATION" "$SENDREPORT" "$EMAIL"
+#
+# -- UTILITES IS INSTALLED? -- #
+# 
+if [ ! -f "$ftpfs" ]; then
+    echo "$fdate4log - [$msg_warn]:$modulename:$FUNCNAME:main - ${bold}$ftpfs ${red}$msg_err_not_found${reset}"
+    sig_t
+fi
+# 
+if [ ! -f "$sshfs" ]; then
+    echo "$fdate4log - [$msg_warn]:$modulename:$FUNCNAME:main - ${bold}$ftpfs ${red}$msg_err_not_found${reset}"
+    sig_t
+fi
+
+#
+if [ ! -f "$mailer" ]; then
+    echo "$fdate4log - [$msg_warn]:$modulename:$FUNCNAME:main - ${bold}$mailer ${red}$msg_err_not_found${reset}"
+    sig_t
+fi
+#
+# -- LET'S ROLL :)
+#
+if [[ "$JOBTYPE" == "check" ]] ;then
+   check_fs "$SOURCE"
+   check_fs_ret=$?
+   if [[ "$check_fs_ret" -gt "0" ]]; then
+        # echo "$fdate4log - [$msg_warn]:$modulename:$FUNCNAME:main - $msg_err_operation_inc" 
+        sig_t
+        log_proc "$out_log" "ERROR : $SOURCE is not mounted<br/>"
+        return 1;
+    else
+    log_proc "$out_log" "SUCCESS : $SOURCE is mounted<br/>"
+    # return 0;
+    fi
+#
+# -- MOUNT FTPFS or SSHFS --
+# 
+elif [[ "$JOBTYPE" == "mount" ]]; then
+    check_src "$SOURCE"
+    check_src_ret=$?
+    if [[ "$check_src_ret" -gt "0" ]]; then
+        echo "$fdate4log - [$msg_warn]:$modulename:$FUNCNAME:main - $msg_err_operation_inc" 
+        log_proc "$out_log" "<b>ERROR : $SOURCE is not exist</b><br/>"
+    else
+        log_proc "$out_log" "<b>SUCCESS : $SOURCE is exist</b><br/>"
+        mount_fs "$PROTOCOL" "$REMOTEHOST" "$CREDENTIALS" "$SOURCE" "$DESTINATION"
+        mount_fs_ret=$?
+        if [[ "$mount_fs_ret" -gt "0" ]]; then
+             log_proc "$out_log" "ERROR : $SOURCE was not mounted to $REMOTEHOST:$DESTINATION" "syslog" 
+             log_proc "$out_log" "<br/>"
+        fi
+fi
+#
+elif [[ "$JOBTYPE" == "umount" ]]; then
+    check_src "$SOURCE"
+    check_src_ret=$?
+    if [[ "$check_src_ret" -gt "0" ]]; then
+        echo "$fdate4log - [$msg_warn]:$modulename:$FUNCNAME:main - $msg_err_operation_inc" 
+        log_proc "$out_log" "<b>ERROR : $SOURCE is not exist</b><br/>"
+    else
+        log_proc "$out_log" "<b>SUCCESS : $SOURCE is exist</b><br/>"
+        umount_fs "$SOURCE"
+        umount_fs_ret=$?
+        if [[ "$umount_fs_ret" -gt "0" ]]; then
+             log_proc "$out_log" "ERROR : can't unmount $SOURCE" "syslog" 
+             log_proc "$out_log" "<br/>"
+        else 
+        echo "$fdate4log - [$msg_info]:$modulename:$FUNCNAME:main - ${bold}${green}$SOURCE: $msg_info_op_umount_fs${reset}" 
+        log_proc "$out_log" "<b>SUCCESS : $SOURCE was unmounted</b><br/>"
+        log_proc "$out_log" "SUCCESS : $SOURCE was unmounted" "syslog" 
+     
+    fi 
+fi
+#
+# -- OTHER JOBS
+else
+    echo "$fdate4log - [$msg_warn]:$modulename:$FUNCNAME:main - $msg_warn_other_job_type" 
+    sig_t
+fi
+#
+# -- CALCULATE EXECUTION TIME
+#
+t2=$(date +%s.%N)
+log_close $t2
+#
+#
+# -- SEND NOTIFY TO EMAIL
+if [[ "$SENDREPORT" == "true" ]]; then
+        # nail -s "exofs report - $fdate4log" "$EMAIL" < "$out_log"
+        $mailer -q -f "$frommail" -t "$EMAIL" -cc "$EMAIL" -u "exofs report" -o message-content-type=html -o message-file="$out_log" 
+fi
+#
+exit 0;

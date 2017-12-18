@@ -1,0 +1,3 @@
+#!/bin/bash
+/opt/exofs/bin/exofs --jobid="MOUNT FTPFS JOB1" --jobtype="mount" --protocol="FTPFS" --rhost="REMOTE_HOST_FQDN_OR_IP" --credentials="/opt/exofs/etc/mount_ftpfs_job1.conf" --source="/var/ftpfs_job1" --destination="/REMOTE_DIR" --sendreport="true" --email="YOU_EMAIL@HERE.DOMAIN"
+exit 0;

@@ -1,0 +1,71 @@
+#!/bin/bash
+##################################################
+# -- VERY LAZY SCRIPT FOR PING FTPFS or SSHFS -- #
+##################################################
+# ARGS:                                          #
+#   * $1 - FS MOUNT POINT                        #
+#   * $2 - FILENAME FOR CHECKING (MUST BE R/W)   # 
+#   * $3 - SHOW MESSAGES ('-d')                  #                       
+##################################################
+fdate4log=$(date +"%Y/%m/%d - %H:%M:%S")
+fdate4fss=$(date +"%Y%m%d_%H%M%S")
+fdate4tch=$(date +"%s")
+#
+red=`tput setaf 1`
+green=`tput setaf 2`
+bold=`tput bold`
+reset=`tput sgr0`
+# 
+# -- CHECKING FOR MOUNT POINT EXISTING -- #
+# 
+if [ ! -d "$1" ]; then
+    if [[ "$3" == "-d" ]]; then
+      echo "${bold}${red} $fdate4log - ERROR: MOUNT POINT $1 IS NOT EXIST." 
+    fi
+    logger -i -t pingfs "ERROR: mount point $1 is not exist."
+    exit 1;
+fi
+#
+# -- CHECKING FOR FILE EXISTING -- #
+# 
+if [ ! -e "$2" ]; then
+    if [[ "$3" == "-d" ]]; then
+      echo "${bold}${red} $fdate4log - ERROR: FILE $2 IS NOT FOUND. FILESYSTEM IS NOT AVAILABLE."
+    fi
+    logger -i -t pingfs "ERROR: file $2 is not found. Filesystem is not available."
+    exit 2;
+fi
+#
+# -- CHECKING FOR FILE IS EMPTY -- #
+# 
+if [ ! -s "$2" ]; then
+    if [[ "$3" == "-d" ]]; then
+      echo "${bold}${red} $fdate4log - ERROR: FILE $2 IS EMPTY. FILESYSTEM IS NOT MOUNT."
+    fi
+    logger -i -t pingfs "ERROR: file $2 is empty. Filesystem is not mount."
+    exit 3;
+fi
+#
+# -- NOW: WRITE TO FILE TIMESTAMP -- #
+#
+echo_ret=`echo "$fdate4tch" > "$2"`
+echo_ret=$?
+# -- DEBUG -- echo $echo_ret
+    if [[ "$echo_ret" -gt "0" ]]; then
+        if [[ "$3" == '-d' ]]; then
+            echo "${bold}${red} $fdate4log - ERROR: I/O ERROR. CAN'T WRITE TO FILE $2."
+        fi
+    logger -i -t pingfs "ERROR: I/O error. Can't write to file $2."
+    exit 4;
+    fi 
+# 
+# -- SHOW SUCCESS MESSAGE -- #
+# 
+if [[ "$3" == '-d' ]]; then
+    echo "${bold}${green} $fdate4log - SUCCESS: PING WAS SUCCESSFUL. FILESYSTEM IS AVAILABLE."
+fi
+    logger -i -t pingfs "SUCCESS: filesystem $1 is available."
+#
+# -- EXIT WITH RETURN CODE 0; -- #
+#
+exit 0;
